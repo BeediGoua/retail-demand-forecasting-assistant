@@ -7,7 +7,6 @@ from pathlib import Path
 
 st.set_page_config(
     page_title="Retail Forecasting Assistant", 
-    page_icon="📊", 
     layout="wide"
 )
 
@@ -72,7 +71,7 @@ def get_stats():
         conn.close()
 
 # Interface principale
-st.title("📊 Retail Forecasting & Inventory Assistant")
+st.title("Retail Forecasting & Inventory Assistant")
 st.markdown("**Assistant d'aide à la décision pour l'optimisation des stocks**")
 
 st.divider()
@@ -82,10 +81,10 @@ db_exists = check_database_exists()
 raw_data_exists = check_raw_data_exists()
 
 if not db_exists:
-    st.warning("⚠️ La base de données n'est pas encore initialisée")
+    st.warning("La base de données n'est pas encore initialisée")
     
     if not raw_data_exists:
-        st.error("❌ Données brutes manquantes")
+        st.error("Données brutes manquantes")
         st.markdown("""
         Les fichiers CSV bruts sont introuvables dans `data/raw/`.
         
@@ -94,7 +93,7 @@ if not db_exists:
         2. Placer les fichiers dans le dossier `data/raw/`
         """)
     else:
-        st.success("✅ Données brutes détectées (119 MB)")
+        st.success("Données brutes détectées (119 MB)")
         
         st.markdown("""
         ### Initialisation de la Base de Données
@@ -109,15 +108,15 @@ if not db_exists:
         **Durée estimée** : 2-3 minutes
         """)
         
-        if st.button("🚀 Initialiser la Base de Données", type="primary", use_container_width=True):
+        if st.button("Initialiser la Base de Données", type="primary", use_container_width=True):
             if build_database():
-                st.success("✅ Base de données créée avec succès !")
+                st.success("Base de données créée avec succès !")
                 st.balloons()
                 st.rerun()
             else:
-                st.error("❌ Échec de la construction. Consultez les logs ci-dessus.")
+                st.error("Échec de la construction. Consultez les logs ci-dessus.")
 else:
-    st.success("✅ Système opérationnel")
+    st.success("Système opérationnel")
     
     # Affichage des statistiques
     stores, families, weeks, sales_records = get_stats()
@@ -133,9 +132,9 @@ else:
     st.markdown("""
     ### État du Système
     
-    - ✅ **Data Warehouse** : Connecté (`retail.sqlite`)
-    - 🏗️ **Modèles** : En attente d'entraînement
-    - 📉 **Prévisions** : Non disponibles
+    - **Data Warehouse** : Connecté (`retail.sqlite`)
+    - **Modèles** : En attente d'entraînement
+    - **Prévisions** : Non disponibles
     
     ### Prochaines Étapes
     
@@ -148,9 +147,9 @@ else:
     """)
     
     # Option de reconstruction
-    with st.expander("⚙️ Options Avancées"):
+    with st.expander("Options Avancées"):
         st.warning("Attention : Cette action va supprimer et reconstruire la base de données")
-        if st.button("🔄 Reconstruire la Base de Données"):
+        if st.button("Reconstruire la Base de Données"):
             if DB_PATH.exists():
                 DB_PATH.unlink()
             st.rerun()
