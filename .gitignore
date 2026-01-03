@@ -4,6 +4,12 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Data brutes (télécharger via Kaggle - voir data/README.md)
+data/raw/*.csv
+
+# Data intermédiaires (régénérables via scripts/preprocessing.py)
+data/processed/*.parquet
+
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
