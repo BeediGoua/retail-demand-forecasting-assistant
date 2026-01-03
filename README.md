@@ -123,6 +123,19 @@ cd retail-demand-forecasting-assistant
 pip install -r requirements.txt
 ```
 
+### Téléchargement des Données
+Ce projet utilise le dataset Kaggle **Store Sales - Time Series Forecasting**. Les données ne sont pas incluses dans le dépôt (trop volumineuses).
+
+**Option 1 - Kaggle CLI (Recommandé)** :
+```bash
+pip install kaggle
+kaggle competitions download -c store-sales-time-series-forecasting
+unzip store-sales-time-series-forecasting.zip -d data/raw/
+```
+
+**Option 2 - Manuel** :
+Télécharger depuis https://www.kaggle.com/competitions/store-sales-time-series-forecasting/data et placer les CSV dans `data/raw/`.
+
 ### Construction des Données (Pipeline)
 Pour régénérer l'entrepôt de données depuis les sources brutes :
 ```bash

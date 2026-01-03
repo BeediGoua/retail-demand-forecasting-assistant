@@ -10,6 +10,10 @@ data/raw/*.csv
 # Data intermédiaires (régénérables via scripts/preprocessing.py)
 data/processed/*.parquet
 
+# Data Warehouse (régénérable via scripts/build_warehouse.py - 315 MB)
+data/*.sqlite
+data/*.db
+
 # Notebooks checkpoints
 .ipynb_checkpoints/
 

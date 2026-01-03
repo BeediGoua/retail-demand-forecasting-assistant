@@ -1,1 +1,0 @@
-data/retail.sqlite filter=lfs diff=lfs merge=lfs -text
