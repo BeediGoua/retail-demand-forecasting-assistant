@@ -4,12 +4,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Data (trop volumineux pour Git)
-data/raw/*.csv
-data/processed/*.parquet
-data/*.sqlite
-data/*.db
-
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
