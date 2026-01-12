@@ -38,30 +38,32 @@ flowchart LR
     Raw[Données Brutes CSV] --> Staging[Nettoyage & Typage]
     Staging --> Processing[Transformation Python]
     Processing --> Warehouse[(Data Warehouse SQL)]
-    Warehouse --> Analytics[Analyses & Modèles]
+    Warehouse --> Experiments[(Experiment Tracking DBs)]
+    Experiments --> Analytics[Analyses & Modèles]
 ```
 
 ### Transformation & Qualité (Python)
 Nos scripts de traitement (`src/data/`) appliquent des règles métier strictes :
 1.  **Grille Cartésienne** : Les données de ventes brutes ne contiennent que les transactions. Nous générons les lignes manquantes (Ventes = 0) pour que le modèle apprenne la distinction entre "Pas de vente" (Magasin fermé ?) et "Pas de demande".
-2.  **Agrégation Hebdomadaire ISO** : Pour éviter les chevauchements temporels, nous utilisons le standard **ISO 8601** strict (Semaines du Lundi au Dimanche).
-3.  **Gestion du Futur (Anti-Leakage)** : Les semaines futures (Test Set) sont strictement isolées. Leurs ventes sont marquées comme `NULL` (et non 0) pour éviter de biaiser l'apprentissage.
+2.  **Agrégation Hebdomadaire ISO** : Utilisation du standard **ISO 8601**.
+3.  **Sortie Parquet** : Les données nettoyées et prêtes pour le ML sont stockées dans `data/processed/*.parquet` (fichiers légers et rapides).
 
-### Entrepôt de Données (Data Warehouse)
-Les données sont stockées dans une base SQLite modélisée en **Schéma en Étoile (Star Schema)**, optimisé pour l'analyse décisionnelle.
+### Suivi des Expériences (Experiment Tracking)
+Les résultats des modèles sont stockés dans 3 bases SQLite modulaires (`data/experiments/`) :
+1.  `forecasts.sqlite` : Prévisions probabilistes (P10, P50, P90) et registre des runs.
+2.  `metrics.sqlite` : Erreurs (RMSE, MAE) et monitoring de drift.
+3.  `decisions.sqlite` : Recommandations de commandes optimisées.
 
 ```mermaid
 erDiagram
-    FACT_SALES_WEEKLY }|--|| DIM_STORE : "Lieu"
-    FACT_SALES_WEEKLY }|--|| DIM_FAMILY : "Produit"
-    FACT_SALES_WEEKLY }|--|| DIM_WEEK : "Temps"
-    FACT_SALES_WEEKLY }|--|| DIM_SCENARIO : "Contexte"
+    DIM_RUNS ||--o{ FACT_FORECASTS_WEEKLY : "Génère"
+    DIM_RUNS ||--o{ FACT_BACKTEST_METRICS : "Mesure"
+    DIM_RUNS ||--o{ FACT_INVENTORY_DECISIONS : "Recommande"
 
-    FACT_SALES_WEEKLY {
-        int year_week PK
-        float sales_sum
-        int onpromotion_sum
-        int transactions_sum
+    DIM_RUNS {
+        string run_id PK
+        string model_family
+        json params
     }
 ```
 
