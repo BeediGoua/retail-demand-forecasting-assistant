@@ -16,6 +16,10 @@ class PiecewiseHybrid(BaseEstimator, RegressorMixin):
         self.ma_window = ma_window
         self.season_len = season_len
         self.demand_types_ = {}
+        # Safe init for Streamlit app
+        self.demand_type = "Unknown"
+        self.adi = 0.0
+        self.cv2 = 0.0
         
     def fit(self, X, y=None):
         """
@@ -44,7 +48,8 @@ class PiecewiseHybrid(BaseEstimator, RegressorMixin):
             index=["store_nbr", "family"],
             columns="week_start",
             values="sales",
-            aggfunc="sum"
+            aggfunc="sum",
+            observed=True
         ).sort_index(axis=1)
         
         history_vals = panel.to_numpy() # Shape (n_series, n_weeks)
@@ -58,8 +63,13 @@ class PiecewiseHybrid(BaseEstimator, RegressorMixin):
         for i in range(history_vals.shape[0]):
             y = history_vals[i, :]
             
-            dtype = self._classify(y)
+            dtype, adi, cv2 = self._classify(y)
             self.demand_types_[i] = dtype
+            
+            # Store last instance stats for single-series inspection (App usage)
+            self.demand_type = dtype
+            self.adi = adi
+            self.cv2 = cv2
             
             pred_ma = self._moving_avg(y, h=horizon, window=self.ma_window)
             pred_sn = self._seasonal_naive(y, h=horizon, season_len=self.season_len)
@@ -79,31 +89,31 @@ class PiecewiseHybrid(BaseEstimator, RegressorMixin):
                     "date": future_dates[step],
                     "store_nbr": store,
                     "family": fam,
-                    "sales_pred": max(0.0, val),
+                    "yhat": max(0.0, val),
                     "demand_type": dtype
                 })
                 
         return pd.DataFrame(all_forecasts)
 
     def _classify(self, y):
-        """ADI/CV2 Classification"""
+        """ADI/CV2 Classification. Returns (dtype, adi, cv2)"""
         y = y[~np.isnan(y)]
         n = len(y)
         nz = np.sum(y > 0)
         
-        if nz == 0: return "intermittent"
+        if nz == 0: return "intermittent", 0.0, 0.0
         
         adi = n / nz
         ynz = y[y > 0]
         mu = ynz.mean()
         # CV2 = Variance / Mean^2
-        if mu == 0: return "intermittent"
+        if mu == 0: return "intermittent", adi, 0.0
         cv2 = ynz.var(ddof=0) / (mu ** 2)
         
-        if adi < 1.32 and cv2 < 0.49: return "smooth"
-        if adi < 1.32 and cv2 >= 0.49: return "erratic"
-        if adi >= 1.32 and cv2 < 0.49: return "intermittent"
-        return "lumpy"
+        if adi < 1.32 and cv2 < 0.49: return "smooth", adi, cv2
+        if adi < 1.32 and cv2 >= 0.49: return "erratic", adi, cv2
+        if adi >= 1.32 and cv2 < 0.49: return "intermittent", adi, cv2
+        return "lumpy", adi, cv2
 
     def _moving_avg(self, y, h, window):
         if len(y) == 0: return np.zeros(h)

@@ -1,155 +1,148 @@
 import streamlit as st
-import sqlite3
-import pandas as pd
-import subprocess
-import sys
 from pathlib import Path
+import sys
+import os
 
+# Adjust path for local imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+
+from components.ui import load_css
+from utils.data_loader import load_weekly_data
+
+# --- Page Config ---
 st.set_page_config(
-    page_title="Retail Forecasting Assistant", 
-    layout="wide"
+    page_title="Retail Forecasting Assistant",
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-DB_PATH = Path("data/retail.sqlite")
-RAW_DATA_PATH = Path("data/raw/train.csv")
+# --- Load CSS ---
+load_css("style.css")
 
-def check_database_exists():
-    """Vérifie si la base de données existe et est valide"""
-    if not DB_PATH.exists():
-        return False
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM fact_sales_weekly")
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count > 0
-    except:
-        return False
+# --- HEADER & KPI ---
+st.title("Retail Demand Assistant")
+st.markdown("### Next-Gen Supply Chain Optimization Engine")
 
-def check_raw_data_exists():
-    """Vérifie si les données brutes sont présentes"""
-    return RAW_DATA_PATH.exists()
-
-def build_database():
-    """Lance le pipeline de construction de la base de données"""
-    with st.spinner("Étape 1/2 : Traitement des données (peut prendre 2-3 minutes)..."):
-        result = subprocess.run(
-            [sys.executable, "scripts/preprocessing.py"],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            st.error(f"Erreur lors du preprocessing : {result.stderr}")
-            return False
+# Load Data for Global KPIs
+df = load_weekly_data()
+if not df.empty:
+    total_active_series = df[['store_nbr', 'family']].drop_duplicates().shape[0]
+    total_sales_volume = df['sales'].sum()
+    last_date = df['week_start'].max()
     
-    with st.spinner("Étape 2/2 : Construction de la base de données..."):
-        result = subprocess.run(
-            [sys.executable, "scripts/build_warehouse.py"],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            st.error(f"Erreur lors du build : {result.stderr}")
-            return False
-    
-    return True
+    # Calculate simple growth (Last 4 weeks vs Prev 4 weeks)
+    weekly_agg = df.groupby('week_start', observed=True)['sales'].sum()
+    last_4_avg = weekly_agg.tail(4).mean()
+    prev_4_avg = weekly_agg.iloc[-8:-4].mean()
+    growth = (last_4_avg - prev_4_avg) / prev_4_avg if prev_4_avg > 0 else 0
 
-@st.cache_data
-def get_stats():
-    """Récupère les statistiques de la base de données"""
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        n_stores = pd.read_sql("SELECT COUNT(*) FROM dim_store", conn).iloc[0,0]
-        n_families = pd.read_sql("SELECT COUNT(*) FROM dim_family", conn).iloc[0,0]
-        n_weeks = pd.read_sql("SELECT COUNT(*) FROM dim_week", conn).iloc[0,0]
-        n_sales_records = pd.read_sql("SELECT COUNT(*) FROM fact_sales_weekly", conn).iloc[0,0]
-        return n_stores, n_families, n_weeks, n_sales_records
-    except Exception as e:
-        return 0, 0, 0, 0
-    finally:
-        conn.close()
+    st.markdown("---")
+    st.header(f"System Pulse (As of {last_date.date()})")
 
-# Interface principale
-st.title("Retail Forecasting & Inventory Assistant")
-st.markdown("**Assistant d'aide à la décision pour l'optimisation des stocks**")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-st.divider()
+    with kpi1:
+        # Baseline Accuracy Proxy (Global WAPE from audit)
+        st.metric("Model Baseline WAPE", "9.3%", "-0.8% vs Legacy", help="Global error rate of PiecewiseHybrid model")
+        st.caption("Validated Benchmark")
 
-# Vérification de l'état du système
-db_exists = check_database_exists()
-raw_data_exists = check_raw_data_exists()
+    with kpi2:
+        # Latest Demand Trend
+        st.metric("Demand Momentum (4W)", f"{growth:+.1%}", "vs Prev Month", 
+                 delta_color="normal" if growth > 0 else "inverse")
+        st.caption("Short-term Sales Velocity")
 
-if not db_exists:
-    st.warning("La base de données n'est pas encore initialisée")
-    
-    if not raw_data_exists:
-        st.error("Données brutes manquantes")
-        st.markdown("""
-        Les fichiers CSV bruts sont introuvables dans `data/raw/`.
-        
-        **Pour les obtenir** :
-        1. Télécharger depuis Kaggle : https://www.kaggle.com/competitions/store-sales-time-series-forecasting/data
-        2. Placer les fichiers dans le dossier `data/raw/`
-        """)
-    else:
-        st.success("Données brutes détectées (119 MB)")
-        
-        st.markdown("""
-        ### Initialisation de la Base de Données
-        
-        Cliquez sur le bouton ci-dessous pour construire la base de données.
-        
-        **Ce processus va** :
-        1. Nettoyer et transformer les données brutes
-        2. Créer les agrégations hebdomadaires
-        3. Construire le Data Warehouse SQL (315 MB)
-        
-        **Durée estimée** : 2-3 minutes
-        """)
-        
-        if st.button("Initialiser la Base de Données", type="primary", use_container_width=True):
-            if build_database():
-                st.success("Base de données créée avec succès !")
-                st.balloons()
-                st.rerun()
-            else:
-                st.error("Échec de la construction. Consultez les logs ci-dessus.")
+    with kpi3:
+        st.metric("Active Series (Scope)", f"{total_active_series:,.0f}", "Store x SKU Pairs")
+        st.caption("Full Portfolio Coverage")
+
+    with kpi4:
+        st.metric("Last Data Point", last_date.strftime('%Y-%m-%d'), "Weekly Update")
+        st.caption("Data Freshness")
+
 else:
-    st.success("Système opérationnel")
-    
-    # Affichage des statistiques
-    stores, families, weeks, sales_records = get_stats()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Magasins", stores)
-    col2.metric("Familles Produits", families)
-    col3.metric("Semaines Historiques", weeks)
-    col4.metric("Enregistrements Ventes", f"{sales_records:,}")
-    
-    st.divider()
-    
+    st.warning("Data not loaded. Check connection.")
+
+
+# --- EXECUTIVE SUMMARY ---
+st.markdown("""
+<div class="hero-box">
+    <strong>Executive Summary</strong>: 
+    This system transforms raw sales history into <strong>Actionable Inventory Decisions</strong>. 
+    By combining statistical baselines with advanced Gradient Boosting (LightGBM/CatBoost), 
+    we predict demand weeks in advance to minimize <strong>Lost Sales</strong> and <strong>Overstock Waste</strong>.
+</div>
+""", unsafe_allow_html=True)
+
+
+# --- CONTEXT ---
+st.markdown("---")
+st.header("Project Context & Capabilities")
+
+col1, col2 = st.columns(2)
+
+with col1:
     st.markdown("""
-    ### État du Système
-    
-    - **Data Warehouse** : Connecté (`retail.sqlite`)
-    - **Modèles** : En attente d'entraînement
-    - **Prévisions** : Non disponibles
-    
-    ### Prochaines Étapes
-    
-    Utilisez le menu latéral pour naviguer vers :
-    - **Exploration des Données** : Visualiser les tendances historiques
-    - **Modélisation** : Entraîner les modèles de prévision
-    - **Décisions Stock** : Générer les recommandations de commande
-    
-    *(Fonctionnalités en développement)*
-    """)
-    
-    # Option de reconstruction
-    with st.expander("Options Avancées"):
-        st.warning("Attention : Cette action va supprimer et reconstruire la base de données")
-        if st.button("Reconstruire la Base de Données"):
-            if DB_PATH.exists():
-                DB_PATH.unlink()
-            st.rerun()
+    <div class="hero-box" style="background-color: #F3E5F5; border-left: 5px solid #7B1FA2;">
+        <h4>1. The Challenge: Retail Uncertainty</h4>
+        <ul>
+            <li><strong>Erratic Demand</strong>: Promotions, holidays, and local events create noise.</li>
+            <li><strong>Sparse Data</strong>: Many items have intermittent sales (zeros), fooling traditional models.</li>
+            <li><strong>Scale</strong>: Managing thousands of SKU/Store combinations manually is impossible.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    <div class="hero-box" style="background-color: #E0F2F1; border-left: 5px solid #00695C;">
+        <h4>2. The Solution: AI-Driven Assistant</h4>
+        <ul>
+            <li><strong>Hybrid Engine</strong>: Automatically switches between Intermittent (Croston) and Dense (GBM) models.</li>
+            <li><strong>Strategic Planning</strong>: Aggregated views for Category Managers.</li>
+            <li><strong>Operational Precision</strong>: Granular SKU-level forecasts for Store Managers.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# --- NAVIGATION ---
+st.markdown("---")
+st.header("Tools & Modules")
+
+nav1, nav2, nav3 = st.columns(3)
+
+with nav1:
+    st.markdown("""
+    <div class="nav-card">
+        <h4>Business Insights</h4>
+        <p>Strategic view. Analyze aggregated trends, seasonality, and overall category performance.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Open Insights", use_container_width=True):
+        st.switch_page("pages/1_Business_Insights.py")
+
+with nav2:
+    st.markdown("""
+    <div class="nav-card">
+        <h4>Forecast Inspector</h4>
+        <p>Operational deep-dive. Inspect specific Store-Item forecasts and verify backtest accuracy.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Open Inspector", use_container_width=True):
+        st.switch_page("pages/2_Forecast_Inspector.py")
+
+with nav3:
+    st.markdown("""
+    <div class="nav-card">
+        <h4>Methodology</h4>
+        <p>Technical documentation. Understand the Hybrid Model logic, metrics, and data pipeline.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Read Docs", use_container_width=True, disabled=True):
+        st.write("(Coming Soon)")
+
+st.markdown("---")
+st.caption("Retail Demand Assistant | Built with Streamlit & Plotly")
