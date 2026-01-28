@@ -5,7 +5,7 @@ __pycache__/
 *.pyo
 
 # Documentation locale (non versionnée)
-# notes/
+notes/
 
 # Data intermédiaires (régénérables via scripts/preprocessing.py)
 data/processed/*.parquet

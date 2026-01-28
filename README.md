@@ -73,25 +73,48 @@ erDiagram
 
 Nous adoptons une approche pragmatique : le "meilleur" modèle est celui qui est le plus robuste et utile.
 
-### Approche Multi-Modèles
-Nous ne nous reposons pas sur un algorithme unique. Le système met en compétition plusieurs approches :
-1.  **Baselines Statistiques** :
-    *   *Seasonal Naive* : Réplique la saisonnalité de l'année précédente. Sert de "plancher" de performance.
-    *   *ETS / Theta* : Modèles robustes pour capturer la tendance et la saisonnalité.
-2.  **Machine Learning (Gradient Boosting)** :
-    *   Algorithmes : XGBoost, LightGBM, CatBoost.
-    *   Force : Capable d'intégrer des variables exogènes (Impact d'une promotion, Prix du pétrole, Jour férié local).
-3.  **Croston-SBA** : Spécifique pour les produits à ventes intermittentes (beaucoup de zéros).
+### Approche "Baseline Hybride" (Smart Routing)
 
-### Routing Intelligent ("Smart Baseline")
-Le système analyse le profil de chaque série temporelle (Régulière vs Intermittente) pour router automatiquement vers le modèle le plus adapté.
+La "Baseline" du projet n'est pas un modèle unique (comme une simple moyenne), c'est une **Stratégie Hybride Intelligente** (Smart Routing).
 
-### Validation Réaliste (Rolling Origin Backtest)
-Nous ne faisons pas un simple split Train/Test aléatoire. Nous simulons le passage du temps réel :
-1.  Entraînement jusqu'à la semaine W.
-2.  Prévision des semaines W+1 à W+8.
-3.  Comparaison avec la réalité.
-4.  Avance à la semaine W+1 et répétition.
+Imaginez-la comme un **médecin de triage** aux urgences. Au lieu de donner le même médicament à tout le monde, elle examine d'abord le "patient" (le produit) puis décide du traitement.
+
+Voici exactement ce qu'elle fait, étape par étape :
+
+#### 1. Le Diagnostic (Analyse du Produit)
+Pour chaque produit du magasin, la baseline calcule deux indicateurs vitaux sur son historique.
+
+**ADI (Average Demand Interval) - La Fréquence**
+*   *Formule* : $ADI = \frac{N}{Nz}$ (où $N$ est la durée totale et $Nz$ le nombre de semaines avec ventes > 0).
+*   *Interprétation* : Est-ce qu'on en vend souvent (tous les jours, ADI $\approx$ 1) ou rarement (une fois par mois, ADI > 4) ?
+
+**CV² (Coefficient of Variation Squared) - La Volatilité**
+*   *Formule* : $CV^2 = \frac{\sigma^2}{\mu^2}$ (Variance divisée par la Moyenne au carré).
+*   *Interprétation* : Quand on en vend, est-ce que c'est toujours la même quantité (stable, CV² faible) ou est-ce que ça varie énormément (nerveux, CV² élevé) ?
+
+#### 2. La Classification (Matrice Syntetos-Boylan)
+En fonction de ces deux chiffres, elle classe le produit dans une case de la matrice, utilisant les seuils théoriques validés ($ADI = 1.32$ et $CV^2 = 0.49$) :
+
+*   **Smooth (Tranquille)** ($ADI < 1.32, CV^2 < 0.49$) : Ventes régulières et stables (ex: Lait, Pain).
+*   **Erratic (Nerveux)** ($ADI < 1.32, CV^2 \ge 0.49$) : Ventes fréquentes mais quantités folles (ex: Promos flash).
+*   **Intermittent** ($ADI \ge 1.32, CV^2 < 0.49$) : Ventes rares mais quantités stables.
+*   **Lumpy (Grumuleux)** ($ADI \ge 1.32, CV^2 \ge 0.49$) : Ventes rares ET quantités folles (le pire cas).
+
+#### 3. Le "Routing" (Le Choix du Modèle)
+C'est là que la magie opère. Le code (`src/baselines/optimized.py`) applique automatiquement la meilleure formule pour chaque profil :
+
+| Type de Produit | La Recette Appliquée | Pourquoi ce choix ? |
+| :--- | :--- | :--- |
+| **Produits Stables** (Smooth) | **Mix (70% Moyenne + 30% Saisonnier)** | On lisse le bruit tout en gardant une légère mémoire de la saisonnalité de l'année précédente. |
+| **Produits Nerveux** (Erratic) | **Mix (50% Moyenne + 50% Saisonnier)** | La volatilité est forte : on fait plus confiance à la saisonnalité (historique) car la moyenne réagit trop lentement aux pics. |
+| **Produits Rares** (Intermittent/Lumpy) | **Moyenne Mobile Robuste** | Inutile de chercher une saisonnalité sur des ventes rares. On assure le "minimum vital" pour éviter le surstockage. |
+
+#### En résumé
+La baseline ne cherche pas à être "intelligente" au sens IA/Deep Learning. Elle cherche à être **statistiquement robuste**. Elle évite les erreurs stupides :
+*   Ne pas prédire de saisonnalité sur un produit qui ne se vend jamais.
+*   Ne pas ignorer la tendance récente sur un produit qui décolle.
+
+C'est cette stratégie de **"bon sens automatisé"** qui lui permet d'atteindre une erreur (**WAPE**) de seulement **8%**, ce qui est très difficile à battre même pour des algorithmes complexes.
 
 ---
 
